@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  alz: 'stalejohnsen/rtgwalz'  # Replace with your other repository
+  alz: 'stalejohnsen/rtgwalz'  # Replace with your alz repository
 
 jobs:
   apply:
