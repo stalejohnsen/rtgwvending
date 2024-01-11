@@ -1,0 +1,65 @@
+---
+name: Continuous Delivery
+on:
+  push:
+    branches:
+    - main
+  workflow_dispatch:
+
+env:
+  alz: 'stalejohnsen/rtgwalz'  # Replace with your other repository
+
+jobs:
+  apply:
+    name: Apply with Terraform
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      ARM_TENANT_ID: ${{secrets.AZURE_TENANT_ID}}
+      ARM_CLIENT_ID: ${{secrets.AZURE_CLIENT_ID}}
+      ARM_SUBSCRIPTION_ID: ${{secrets.AZURE_SUBSCRIPTION_ID}}  
+      ARM_USE_AZUREAD: true
+      ARM_USE_OIDC: true
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        id: tf-init
+        run: terraform init -backend-config="storage_account_name=${{secrets.BACKEND_AZURE_STORAGE_ACCOUNT_NAME}}" -backend-config="container_name=${{secrets.BACKEND_AZURE_STORAGE_ACCOUNT_CONTAINER_NAME}}" -backend-config="resource_group_name=${{secrets.BACKEND_AZURE_RESOURCE_GROUP_NAME}}" -backend-config="key=terraform.tfstate"
+
+      - name: Terraform Apply
+        run: terraform apply -input=false -auto-approve
+
+      - name: Set output as env variable
+        id: set_var
+        run: echo "VNET_ADDRESS=$(terraform output -raw vnet_address_space)" >> $GITHUB_ENV
+
+      - name: Checkout alz repository
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ env.alz }}
+          token: ${{ secrets.GH_PAT }}  
+          path: temp
+
+      - name: Write output to vnet YAML file in alz repo
+        run: |
+          echo "  - ${{ env.VNET_ADDRESS }}" >> temp/vnet.yml
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name 'alzvending'
+          git config --global user.email 'alzvending@example.com'
+          git add .
+          git commit -m "add new VNET_ADDRESS"
+          git push
+        working-directory: temp
+
